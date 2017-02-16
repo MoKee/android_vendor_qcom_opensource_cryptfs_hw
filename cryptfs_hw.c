@@ -66,6 +66,11 @@
 #define UPDATE_HW_DISK_ENC_KEY 2
 
 #define QSEECOM_UP_CHECK_COUNT 10
+#define MAX_DEVICE_ID_LENGTH 4 /* 4 = 3 (MAX_SOC_ID_LENGTH) + 1 */
+
+static unsigned int cpu_id[] = {
+	239, /* MSM8939 SOC ID */
+};
 
 static int loaded_library = 0;
 static int (*qseecom_create_key)(int, void*);
@@ -262,6 +267,59 @@ int clear_hw_device_encryption_key()
 
     return 0;
 }
+
+
+/*
+ * By default HW FDE is enabled, if the execution comes to
+ * is_hw_fde_enabled() API then for specific device/soc id,
+ * HW FDE is disabled.
+ */
+#ifdef CONFIG_SWV8_DISK_ENCRYPTION
+unsigned int is_hw_fde_enabled(void)
+{
+    unsigned int device_id = -1;
+    unsigned int array_size;
+    unsigned int status = 1;
+    FILE *fd = NULL;
+    unsigned int i;
+    int ret = -1;
+    char buf[MAX_DEVICE_ID_LENGTH];
+
+    fd = fopen("/sys/devices/soc0/soc_id", "r");
+    if (fd) {
+        ret = fread(buf, 1, MAX_DEVICE_ID_LENGTH, fd);
+        fclose(fd);
+    } else {
+        fd = fopen("/sys/devices/system/soc/soc0/id", "r");
+        if (fd) {
+            ret = fread(buf, 1, MAX_DEVICE_ID_LENGTH, fd);
+            fclose(fd);
+        }
+    }
+
+    if (ret > 0) {
+        device_id = atoi(buf);
+    } else {
+        SLOGE("Failed to read device id");
+        return status;
+    }
+
+    array_size = sizeof(cpu_id) / sizeof(cpu_id[0]);
+    for (i = 0; i < array_size; i++) {
+        if (device_id == cpu_id[i]) {
+            status = 0;
+            break;
+        }
+    }
+
+    return status;
+}
+#else
+unsigned int is_hw_fde_enabled(void)
+{
+    return 1;
+}
+#endif
 
 static int get_keymaster_version()
 {
